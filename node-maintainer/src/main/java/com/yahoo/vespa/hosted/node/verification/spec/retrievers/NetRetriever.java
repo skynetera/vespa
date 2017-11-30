@@ -2,16 +2,20 @@
 package com.yahoo.vespa.hosted.node.verification.spec.retrievers;
 
 import com.yahoo.vespa.hosted.node.verification.commons.CommandExecutor;
+import com.yahoo.vespa.hosted.node.verification.commons.DNSLookup;
 import com.yahoo.vespa.hosted.node.verification.commons.parser.OutputParser;
 import com.yahoo.vespa.hosted.node.verification.commons.parser.ParseInstructions;
 import com.yahoo.vespa.hosted.node.verification.commons.parser.ParseResult;
 import com.yahoo.vespa.hosted.node.verification.spec.VerifierSettings;
 import org.apache.commons.exec.ExecuteException;
 
-import java.io.IOException;
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -42,104 +46,113 @@ public class NetRetriever implements HardwareRetriever {
     private static final int PING_SEARCH_ELEMENT_INDEX = 0;
     private static final int PING_RETURN_ELEMENT_INDEX = 0;
     private static final Logger logger = Logger.getLogger(NetRetriever.class.getName());
-    private final HardwareInfo hardwareInfo;
+
     private final CommandExecutor commandExecutor;
+    private final DNSLookup dnsLookup;
     private final VerifierSettings verifierSettings;
 
-
-    public NetRetriever(HardwareInfo hardwareInfo, CommandExecutor commandExecutor, VerifierSettings verifierSettings) {
-        this.hardwareInfo = hardwareInfo;
+    NetRetriever(CommandExecutor commandExecutor, DNSLookup dnsLookup, VerifierSettings verifierSettings) {
         this.commandExecutor = commandExecutor;
+        this.dnsLookup = dnsLookup;
         this.verifierSettings = verifierSettings;
     }
 
     @Override
-    public void updateInfo() {
-        List<ParseResult> parseResults = findInterface();
-        findInterfaceSpeed(parseResults);
+    public void updateInfo(HardwareInfo.Builder hardwareInfoBuilder) {
+        List<ParseResult> parseResults = new ArrayList<>();
+        parseResults.addAll(findInterface());
+        parseResults.addAll(findInterfaceSpeed());
+
         if (verifierSettings.isCheckIPv6()) {
-            testPingResponse(parseResults);
+            parseResults.addAll(testPing6Response());
         }
-        updateHardwareInfoWithNet(parseResults);
+        updateHardwareInfoWithNet(hardwareInfoBuilder, parseResults);
+        hardwareInfoBuilder.withIpAddresses(getAllDnsAddressesForHostname());
     }
 
-    protected List<ParseResult> findInterface() {
-        List<ParseResult> parseResults = new ArrayList<>();
+    Set<InetAddress> getAllDnsAddressesForHostname() {
+        try {
+            return new HashSet<>(dnsLookup.lookupAllHostAddr(verifierSettings.getHostname()));
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to lookup hostname in DNS", e);
+            return Collections.emptySet();
+        }
+    }
+
+    List<ParseResult> findInterface() {
         try {
             List<String> commandOutput = commandExecutor.executeCommand(NET_FIND_INTERFACE);
-            parseResults = parseNetInterface(commandOutput);
-
-        } catch (IOException e) {
+            return parseNetInterface(commandOutput);
+        } catch (Exception e) {
             logger.log(Level.WARNING, "Failed to retrieve net interface. ", e);
+            return Collections.emptyList();
         }
-        return parseResults;
     }
 
-    protected List<ParseResult> parseNetInterface(List<String> commandOutput) {
-        List<String> searchWords = new ArrayList<>(Arrays.asList(SEARCH_WORD_INTERFACE_IP4, SEARCH_WORD_INTERFACE_IPV6));
+    List<ParseResult> parseNetInterface(List<String> commandOutput) {
+        List<String> searchWords = Arrays.asList(SEARCH_WORD_INTERFACE_IP4, SEARCH_WORD_INTERFACE_IPV6);
         ParseInstructions parseInstructions = new ParseInstructions(INTERFACE_SEARCH_ELEMENT_INDEX, INTERFACE_RETURN_ELEMENT_INDEX, INTERFACE_NAME_REGEX_SPLIT, searchWords);
-        List<ParseResult> parseResults = OutputParser.parseOutput(parseInstructions, commandOutput);
-        return parseResults;
+        return OutputParser.parseOutput(parseInstructions, commandOutput);
     }
 
-    protected void findInterfaceSpeed(List<ParseResult> parseResults) {
+    List<ParseResult> findInterfaceSpeed() {
         try {
             List<String> commandOutput = commandExecutor.executeCommand(NET_CHECK_INTERFACE_SPEED);
-            ParseResult parseResult = parseInterfaceSpeed(commandOutput);
-            parseResults.add(parseResult);
-        } catch (IOException e) {
-            logger.log(Level.WARNING, "Failed to retrieve interface speed. ", e);
+            return Collections.singletonList(parseInterfaceSpeed(commandOutput));
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to retrieve interface speed.", e);
+            return Collections.emptyList();
         }
     }
 
-    protected ParseResult parseInterfaceSpeed(List<String> commandOutput) throws IOException {
-        List<String> searchWords = new ArrayList<>(Arrays.asList(SEARCH_WORD_INTERFACE_SPEED));
+    ParseResult parseInterfaceSpeed(List<String> commandOutput) {
+        List<String> searchWords = Collections.singletonList(SEARCH_WORD_INTERFACE_SPEED);
         ParseInstructions parseInstructions = new ParseInstructions(INTERFACE_SPEED_SEARCH_ELEMENT_INDEX, INTERFACE_SPEED_RETURN_ELEMENT_INDEX, INTERFACE_SPEED_REGEX_SPLIT, searchWords);
         ParseResult parseResult = OutputParser.parseSingleOutput(parseInstructions, commandOutput);
         if (!parseResult.getSearchWord().matches(SEARCH_WORD_INTERFACE_SPEED)) {
-            throw new IOException("Failed to parse interface speed output.");
+            throw new IllegalArgumentException("Failed to parse interface speed output.");
         }
         return parseResult;
     }
 
-    protected void testPingResponse(List<ParseResult> parseResults) {
+    private List<ParseResult> testPing6Response() {
         try {
             List<String> commandOutput = commandExecutor.executeCommand(PING_NET_COMMAND);
-            parseResults.add(parsePingResponse(commandOutput));
+            return Collections.singletonList(parsePingResponse(commandOutput));
         } catch (ExecuteException e) {
             logger.log(Level.WARNING, "Failed to execute ping6", e);
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.log(Level.WARNING, e.getMessage());
         }
+        return Collections.emptyList();
     }
 
-    protected ParseResult parsePingResponse(List<String> commandOutput) throws IOException {
-        List<String> searchWords = new ArrayList<>(Arrays.asList(PING_SEARCH_WORD));
+    ParseResult parsePingResponse(List<String> commandOutput) {
+        List<String> searchWords = Collections.singletonList(PING_SEARCH_WORD);
         ParseInstructions parseInstructions = new ParseInstructions(PING_SEARCH_ELEMENT_INDEX, PING_RETURN_ELEMENT_INDEX, PING_SPLIT_REGEX_STRING, searchWords);
         ParseResult parseResult = OutputParser.parseSingleOutput(parseInstructions, commandOutput);
         if (!parseResult.getSearchWord().matches(PING_SEARCH_WORD)) {
-            throw new IOException("Failed to parse ping output.");
+            throw new IllegalArgumentException("Failed to parse ping output.");
         }
         return new ParseResult(PING_SEARCH_WORD, parseResult.getValue());
     }
 
-    protected void updateHardwareInfoWithNet(List<ParseResult> parseResults) {
-        hardwareInfo.setIpv6Interface(false);
-        hardwareInfo.setIpv4Interface(false);
+    private void updateHardwareInfoWithNet(HardwareInfo.Builder hardwareInfoBuilder, List<ParseResult> parseResults) {
         for (ParseResult parseResult : parseResults) {
             switch (parseResult.getSearchWord()) {
                 case SEARCH_WORD_INTERFACE_IP4:
-                    hardwareInfo.setIpv4Interface(true);
+                    hardwareInfoBuilder.withIpv4Interface(true);
                     break;
                 case SEARCH_WORD_INTERFACE_IPV6:
-                    hardwareInfo.setIpv6Interface(true);
+                    hardwareInfoBuilder.withIpv6Interface(true);
                     break;
                 case SEARCH_WORD_INTERFACE_SPEED:
-                    double speed = convertInterfaceSpeed(parseResult.getValue());
-                    hardwareInfo.setInterfaceSpeedMbs(speed);
+                    double speed = getInterfaceSpeed(parseResult.getValue());
+                    hardwareInfoBuilder.withInterfaceSpeedMbs(speed);
                     break;
                 case PING_SEARCH_WORD:
-                    setIpv6Connectivity(parseResult);
+                    boolean hasIpv6Connectivity = getIpv6Connectivity(parseResult);
+                    hardwareInfoBuilder.withIpv6Connectivity(hasIpv6Connectivity);
                     break;
                 default:
                     throw new RuntimeException("Invalid ParseResult search word: " + parseResult.getSearchWord());
@@ -147,16 +160,13 @@ public class NetRetriever implements HardwareRetriever {
         }
     }
 
-    protected double convertInterfaceSpeed(String speed) {
-        return Double.parseDouble(speed.replaceAll("[^\\d.]", ""));
-    }
-
-    protected void setIpv6Connectivity(ParseResult parseResult) {
+    boolean getIpv6Connectivity(ParseResult parseResult) {
         String pingResponse = parseResult.getValue();
         String packetLoss = pingResponse.replaceAll("[^\\d.]", "");
-        if (packetLoss.equals("")) return;
-        if (Double.parseDouble(packetLoss) > 99) return;
-        hardwareInfo.setIpv6Connection(true);
+        return !packetLoss.isEmpty() && Double.parseDouble(packetLoss) <= 99;
     }
 
+    static double getInterfaceSpeed(String speed) {
+        return Double.parseDouble(speed.replaceAll("[^\\d.]", ""));
+    }
 }

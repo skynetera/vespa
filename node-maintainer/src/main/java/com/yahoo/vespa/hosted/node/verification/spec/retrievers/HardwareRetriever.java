@@ -8,8 +8,9 @@ package com.yahoo.vespa.hosted.node.verification.spec.retrievers;
 public interface HardwareRetriever {
 
     /**
-     * Should retrieve spec from some part of the hardware, and store the result in hardwareinfo instance passed to class
+     * Should retrieve spec from some part of the hardware, and store the result in
+     * the HardwareInfo.Builder instance passed to the method
      */
-    void updateInfo();
+    void updateInfo(HardwareInfo.Builder hardwareInfoBuilder);
 
 }

@@ -3,7 +3,6 @@ package com.yahoo.vespa.hosted.node.verification.spec.retrievers;
 
 import com.yahoo.vespa.hosted.node.verification.commons.parser.ParseResult;
 import com.yahoo.vespa.hosted.node.verification.mock.MockCommandExecutor;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -11,6 +10,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 /**
  * @author sgrostad
@@ -20,28 +23,22 @@ import static org.junit.Assert.assertEquals;
 public class CPURetrieverTest {
 
     private static final String FILENAME = "src/test/java/com/yahoo/vespa/hosted/node/verification/spec/resources/cpuinfoTest";
-    private HardwareInfo hardwareInfo;
-    private MockCommandExecutor commandExecutor;
-    private CPURetriever cpu;
-    private static final double DELTA = 0.1;
 
-    @Before
-    public void setup() {
-        hardwareInfo = new HardwareInfo();
-        commandExecutor = new MockCommandExecutor();
-        cpu = new CPURetriever(hardwareInfo, commandExecutor);
-    }
+    private final MockCommandExecutor commandExecutor = new MockCommandExecutor();
+    private final CPURetriever cpu = new CPURetriever(commandExecutor);
 
     @Test
     public void updateInfo_should_write_numOfCpuCores_to_hardware_info() throws Exception {
+        HardwareInfo.Builder hardwareInfoBuilder = mock(HardwareInfo.Builder.class);
         commandExecutor.addCommand("cat " + FILENAME);
-        cpu.updateInfo();
-        double expectedAmountOfCores = 4;
-        assertEquals(expectedAmountOfCores, hardwareInfo.getMinCpuCores(), DELTA);
+        cpu.updateInfo(hardwareInfoBuilder);
+
+        verify(hardwareInfoBuilder, times(1)).withMinCpuCores(4);
+        verifyNoMoreInteractions(hardwareInfoBuilder);
     }
 
     @Test
-    public void parseCPUInfoFile_should_return_valid_ArrayList() throws IOException {
+    public void parseCPUInfoFile_should_return_valid_List() throws IOException {
         List<String> commandOutput = MockCommandExecutor.readFromFile(FILENAME);
         List<ParseResult> ParseResults = cpu.parseCPUInfoFile(commandOutput);
         String expectedSearchWord = "cpu MHz";
@@ -66,9 +63,8 @@ public class CPURetrieverTest {
         parseResults.add(new ParseResult("cpu MHz", "2000"));
         parseResults.add(new ParseResult("cpu MHz", "2000"));
         parseResults.add(new ParseResult("cpu MHz", "2000"));
-        cpu.setCpuCores(parseResults);
-        int expectedCpuCores = 3;
-        assertEquals(expectedCpuCores, hardwareInfo.getMinCpuCores());
+
+        assertEquals(3, cpu.countCpuCores(parseResults));
     }
 
 }

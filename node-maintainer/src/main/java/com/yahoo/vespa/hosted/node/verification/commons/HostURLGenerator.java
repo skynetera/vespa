@@ -21,30 +21,17 @@ public class HostURLGenerator {
     private static final String PARSE_ALL_HOSTNAMES_REGEX = ",";
     private static final String PROTOCOL_REGEX = "^(https?|file)://.*$";
 
-    public static List<URL> generateNodeInfoUrl(CommandExecutor commandExecutor, String commaSeparatedUrls) throws IOException {
+    public static List<URL> generateNodeInfoUrl(String commaSeparatedUrls, String hostname) throws IOException {
         List<URL> nodeInfoUrls = new ArrayList<>();
         String[] configServerHostNames = commaSeparatedUrls.split(PARSE_ALL_HOSTNAMES_REGEX);
-        String nodeHostName = generateNodeHostName(commandExecutor);
         for (String configServerHostName : configServerHostNames) {
-            nodeInfoUrls.add(buildNodeInfoURL(configServerHostName, nodeHostName));
+            nodeInfoUrls.add(buildNodeInfoURL(configServerHostName, hostname));
         }
         return nodeInfoUrls;
     }
 
-    protected static String generateNodeHostName(CommandExecutor commandExecutor) throws IOException {
-        String nodeHostName = getEnvironmentVariable(commandExecutor);
-        return nodeHostName;
-    }
 
-    protected static String getEnvironmentVariable(CommandExecutor commandExecutor) throws IOException {
-        List<String> output = commandExecutor.executeCommand("hostname");
-        if (output.size() == 1) {
-            return output.get(0);
-        }
-        throw new IOException("Unexpected output from \"hostname\" command.");
-    }
-
-    protected static URL buildNodeInfoURL(String configServerHostName, String nodeHostName) throws MalformedURLException {
+    static URL buildNodeInfoURL(String configServerHostName, String nodeHostName) throws MalformedURLException {
         if (configServerHostName.matches(PROTOCOL_REGEX)) {
             return new URL(configServerHostName + NODE_HOSTNAME_PREFIX + nodeHostName);
         }

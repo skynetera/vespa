@@ -2,6 +2,7 @@
 package com.yahoo.vespa.hosted.node.verification.spec.retrievers;
 
 import com.yahoo.vespa.hosted.node.verification.commons.CommandExecutor;
+import com.yahoo.vespa.hosted.node.verification.commons.DNSLookup;
 import com.yahoo.vespa.hosted.node.verification.spec.VerifierSettings;
 
 import java.util.ArrayList;
@@ -15,18 +16,22 @@ import java.util.List;
  */
 public class HardwareInfoRetriever {
 
-    public static HardwareInfo retrieve(CommandExecutor commandExecutor, VerifierSettings verifierSettings) {
-        HardwareInfo hardwareInfo = new HardwareInfo();
-        List<HardwareRetriever> infoList = new ArrayList<>();
-        infoList.add(new CPURetriever(hardwareInfo, commandExecutor));
-        infoList.add(new MemoryRetriever(hardwareInfo, commandExecutor));
-        infoList.add(new DiskRetriever(hardwareInfo, commandExecutor));
-        infoList.add(new NetRetriever(hardwareInfo, commandExecutor, verifierSettings));
+    private final List<HardwareRetriever> infoList = new ArrayList<>();
 
-        for (HardwareRetriever hardwareInfoType : infoList) {
-            hardwareInfoType.updateInfo();
-        }
-        return hardwareInfo;
+    public HardwareInfoRetriever(CommandExecutor commandExecutor, VerifierSettings verifierSettings) {
+        infoList.add(new CPURetriever(commandExecutor));
+        infoList.add(new MemoryRetriever(commandExecutor));
+        infoList.add(new DiskRetriever(commandExecutor));
+        infoList.add(new NetRetriever(commandExecutor, new DNSLookup(), verifierSettings));
     }
 
+    public HardwareInfo retrieve() {
+        HardwareInfo.Builder hardwareInfoBuilder = new HardwareInfo.Builder();
+
+        for (HardwareRetriever hardwareInfoType : infoList) {
+            hardwareInfoType.updateInfo(hardwareInfoBuilder);
+        }
+
+        return hardwareInfoBuilder.build();
+    }
 }

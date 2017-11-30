@@ -71,9 +71,9 @@ public class HardwareNodeComparator {
             specVerificationReport.setActualInterfaceSpeed(actualInterfaceSpeed);
         }
 
-        if (nodeRepoHardwareInfo.isIpv6Connection() && !actualHardware.isIpv6Connection()) {
-            specVerificationReport.setActualIpv6Connection(actualHardware.isIpv6Connection());
-        }
+//        if (nodeRepoHardwareInfo.isIpv6Connection() && !actualHardware.isIpv6Connection()) {
+//            specVerificationReport.setActualIpv6Connection(actualHardware.isIpv6Connection());
+//        }
     }
 
     private static boolean outsideThreshold(double value1, double value2, double thresholdPercentage) {

@@ -19,7 +19,7 @@ public class MockCommandExecutor extends CommandExecutor {
 
     private ArrayList<String> mockCommands;
     private int counter;
-    public static final String DUMMY_COMMAND = "DUMMY";
+    private static final String DUMMY_COMMAND = "DUMMY";
 
     public MockCommandExecutor() {
         mockCommands = new ArrayList<>();
@@ -42,11 +42,11 @@ public class MockCommandExecutor extends CommandExecutor {
     }
 
     public static List<String> readFromFile(String filepath) throws IOException {
-        return new ArrayList<>(Arrays.asList(new String(Files.readAllBytes(Paths.get(filepath))).split("\n")));
+        return Arrays.asList(new String(Files.readAllBytes(Paths.get(filepath))).split("\n"));
     }
 
     public List<String> outputFromString(String output) {
-        return new ArrayList<>(Arrays.asList(output.split("\n")));
+        return Arrays.asList(output.split("\n"));
     }
 
 }

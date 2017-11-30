@@ -4,18 +4,13 @@ package com.yahoo.vespa.hosted.node.verification.spec;
 import com.yahoo.log.LogSetup;
 import com.yahoo.vespa.hosted.node.verification.commons.CommandExecutor;
 import com.yahoo.vespa.hosted.node.verification.commons.HostURLGenerator;
-import com.yahoo.vespa.hosted.node.verification.commons.noderepo.IPAddressVerifier;
-import com.yahoo.vespa.hosted.node.verification.commons.noderepo.NodeJsonConverter;
 import com.yahoo.vespa.hosted.node.verification.commons.noderepo.NodeRepoInfoRetriever;
 import com.yahoo.vespa.hosted.node.verification.commons.noderepo.NodeRepoJsonModel;
-import com.yahoo.vespa.hosted.node.verification.commons.report.Reporter;
-import com.yahoo.vespa.hosted.node.verification.commons.report.SpecVerificationReport;
 import com.yahoo.vespa.hosted.node.verification.spec.retrievers.HardwareInfo;
 import com.yahoo.vespa.hosted.node.verification.spec.retrievers.HardwareInfoRetriever;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -31,40 +26,45 @@ public class SpecVerifier {
 
     private static final Logger logger = Logger.getLogger(SpecVerifier.class.getName());
 
-    public static boolean verifySpec(CommandExecutor commandExecutor, List<URL> nodeInfoUrls) throws IOException {
-        NodeRepoJsonModel nodeRepoJsonModel = getNodeRepositoryJSON(nodeInfoUrls);
-        VerifierSettings verifierSettings = new VerifierSettings(nodeRepoJsonModel);
-        HardwareInfo actualHardware = HardwareInfoRetriever.retrieve(commandExecutor, verifierSettings);
+    private static boolean verifySpec(CommandExecutor commandExecutor, List<URL> nodeInfoUrls, String hostname) throws IOException {
+        HardwareInfo expectedHardwareInfo = NodeRepoInfoRetriever.getExpectedHardwareInfo(nodeInfoUrls);
+
+        VerifierSettings verifierSettings = new VerifierSettings(hostname, expectedHardwareInfo.hasIpv6Connectivity());
+        HardwareInfoRetriever hardwareInfoRetriever = new HardwareInfoRetriever(commandExecutor, verifierSettings);
+        HardwareInfo actualHardware = hardwareInfoRetriever.retrieve();
+
         SpecVerificationReport specVerificationReport = makeVerificationReport(actualHardware, nodeRepoJsonModel);
         Reporter.reportSpecVerificationResults(specVerificationReport, nodeInfoUrls);
         return specVerificationReport.isValidSpec();
     }
 
     protected static SpecVerificationReport makeVerificationReport(HardwareInfo actualHardware, NodeRepoJsonModel nodeRepoJsonModel) {
-        SpecVerificationReport specVerificationReport = HardwareNodeComparator.compare(NodeJsonConverter.convertJsonModelToHardwareInfo(nodeRepoJsonModel), actualHardware);
-        IPAddressVerifier ipAddressVerifier = new IPAddressVerifier();
-        ipAddressVerifier.reportFaultyIpAddresses(nodeRepoJsonModel, specVerificationReport);
+        SpecVerificationReport specVerificationReport = HardwareNodeComparator.compare(, actualHardware);
+        IPAddressRetriever ipAddressRetriever = new IPAddressRetriever(ipAddresses);
+        ipAddressRetriever.reportFaultyIpAddresses(nodeRepoJsonModel, specVerificationReport);
         return specVerificationReport;
-    }
-
-    protected static NodeRepoJsonModel getNodeRepositoryJSON(List<URL> nodeInfoUrls) throws IOException {
-        NodeRepoJsonModel nodeRepoJsonModel = NodeRepoInfoRetriever.retrieve(nodeInfoUrls);
-        return nodeRepoJsonModel;
     }
 
     public static void main(String[] args) {
         LogSetup.initVespaLogging("spec-verifier");
-        CommandExecutor commandExecutor = new CommandExecutor();
-        List<URL> nodeInfoUrls;
         if (args.length == 0) {
             throw new IllegalStateException("Expected config server URL as parameter");
         }
         try {
-            nodeInfoUrls = HostURLGenerator.generateNodeInfoUrl(commandExecutor, args[0]);
-            SpecVerifier.verifySpec(commandExecutor, nodeInfoUrls);
+            CommandExecutor commandExecutor = new CommandExecutor();
+            String hostname = getHostname(commandExecutor);
+            List<URL> nodeInfoUrls = HostURLGenerator.generateNodeInfoUrl(args[0], hostname);
+            verifySpec(commandExecutor, nodeInfoUrls, hostname);
         } catch (IOException e) {
             logger.log(Level.WARNING, e.getMessage());
         }
     }
 
+    private static String getHostname(CommandExecutor commandExecutor) throws IOException {
+        List<String> output = commandExecutor.executeCommand("hostname");
+        if (output.size() == 1) {
+            return output.get(0);
+        }
+        throw new IOException("Unexpected output from \"hostname\" command.");
+    }
 }

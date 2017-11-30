@@ -1,8 +1,6 @@
 // Copyright 2017 Yahoo Holdings. Licensed under the terms of the Apache 2.0 license. See LICENSE in the project root.
 package com.yahoo.vespa.hosted.node.verification.spec;
 
-import com.yahoo.vespa.hosted.node.verification.commons.noderepo.NodeRepoJsonModel;
-
 /**
  * Contains information on what spec should be verified or not.
  * 
@@ -11,14 +9,16 @@ import com.yahoo.vespa.hosted.node.verification.commons.noderepo.NodeRepoJsonMod
  */
 public class VerifierSettings {
 
+    private final String hostname;
     private final boolean checkIPv6;
 
-    public VerifierSettings() {
-        this.checkIPv6 = true;
+    public VerifierSettings(String hostname, boolean checkIPv6) {
+        this.checkIPv6 = checkIPv6;
+        this.hostname = hostname;
     }
 
-    public VerifierSettings(NodeRepoJsonModel nodeRepoJsonModel) {
-        checkIPv6 = nodeRepoJsonModel.getIpv6Address() != null;
+    public String getHostname() {
+        return hostname;
     }
 
     public boolean isCheckIPv6() {

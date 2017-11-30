@@ -6,9 +6,7 @@ import com.yahoo.vespa.hosted.node.verification.commons.parser.OutputParser;
 import com.yahoo.vespa.hosted.node.verification.commons.parser.ParseInstructions;
 import com.yahoo.vespa.hosted.node.verification.commons.parser.ParseResult;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -27,45 +25,39 @@ public class MemoryRetriever implements HardwareRetriever {
     private static final int SEARCH_ELEMENT_INDEX = 0;
     private static final int RETURN_ELEMENT_INDEX = 1;
     private static final Logger logger = Logger.getLogger(MemoryRetriever.class.getName());
-    private final HardwareInfo hardwareInfo;
+
     private final CommandExecutor commandExecutor;
 
-    public MemoryRetriever(HardwareInfo hardwareInfo, CommandExecutor commandExecutor) {
-        this.hardwareInfo = hardwareInfo;
+    MemoryRetriever(CommandExecutor commandExecutor) {
         this.commandExecutor = commandExecutor;
     }
 
     @Override
-    public void updateInfo() {
+    public void updateInfo(HardwareInfo.Builder hardwareInfoBuilder) {
         try {
             List<String> commandOutput = commandExecutor.executeCommand(MEMORY_INFO_COMMAND);
             ParseResult parseResult = parseMemInfoFile(commandOutput);
-            updateMemoryInfo(parseResult);
-        } catch (IOException e) {
+            double memory = convertKBToGB(parseResult.getValue());
+            hardwareInfoBuilder.withMinMainMemoryAvailableGb(memory);
+        } catch (Exception e) {
             logger.log(Level.WARNING, "Failed to retrieve memory info. ", e);
         }
     }
 
-    protected ParseResult parseMemInfoFile(List<String> commandOutput) throws IOException {
-        List<String> searchWords = new ArrayList<>(Arrays.asList(SEARCH_WORD));
+    ParseResult parseMemInfoFile(List<String> commandOutput) {
+        List<String> searchWords = Collections.singletonList(SEARCH_WORD);
         ParseInstructions parseInstructions = new ParseInstructions(SEARCH_ELEMENT_INDEX, RETURN_ELEMENT_INDEX, REGEX_SPLIT, searchWords);
         ParseResult parseResult = OutputParser.parseSingleOutput(parseInstructions, commandOutput);
         if (!parseResult.getSearchWord().matches(SEARCH_WORD)) {
-            throw new IOException("Failed to parse memory info file.");
+            throw new IllegalArgumentException("Failed to parse memory info file.");
         }
         return parseResult;
     }
 
-    protected void updateMemoryInfo(ParseResult parseResult) {
-        double memory = convertKBToGB(parseResult.getValue());
-        hardwareInfo.setMinMainMemoryAvailableGb(memory);
-    }
-
-    protected double convertKBToGB(String totMem) {
+    static double convertKBToGB(String totMem) {
         String[] split = totMem.split(" ");
         double value = Double.parseDouble(split[0]);
-        double kiloToGiga = 1000000.0;
+        double kiloToGiga = 1_000_000.0;
         return value / kiloToGiga;
     }
-
 }

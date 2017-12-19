@@ -1,12 +1,12 @@
 // Copyright 2017 Yahoo Holdings. Licensed under the terms of the Apache 2.0 license. See LICENSE in the project root.
 package com.yahoo.vespa.hosted.controller.api.integration.zone;
 
-import com.yahoo.config.provision.ApplicationId;
 import com.yahoo.config.provision.Environment;
 import com.yahoo.config.provision.RegionName;
 import com.yahoo.config.provision.SystemName;
 import com.yahoo.config.provision.ZoneId;
 import com.yahoo.vespa.hosted.controller.api.identifiers.DeploymentId;
+import com.yahoo.vespa.hosted.controller.api.integration.athenz.AthenzService;
 
 import java.net.URI;
 import java.time.Duration;
@@ -53,5 +53,8 @@ public interface ZoneRegistry {
 
     /** Returns the system of this registry. */
     SystemName system();
+
+    /** Return the configserver's Athenz service identity */
+    AthenzService getConfigserverAthenzService(ZoneId zoneId);
 
 }
